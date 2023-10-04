@@ -8,14 +8,19 @@ import {
   SafeFactory,
 } from "@safe-global/protocol-kit";
 import {
-  getApiKit,
   getContractNetworks,
   getEthAdapter,
+  getExecTxn,
   getSafeSdk,
 } from "../utils/safeUtils";
 import { SafeTransactionDataPartial } from "@safe-global/safe-core-sdk-types";
+import { HttpMethod, sendRequest } from "../utils/apiUtil";
+import { apiRespType } from "../types/apiRespType";
 
 const Home: NextPage = () => {
+  const nodeId = "absolute-taun-we-0bf9874a";
+  const apiUrl = "https://backend.dev.buildbear.io";
+
   const { address, isConnected } = useAccount();
   const { data: signer } = useSigner();
   const [connected, setConnected] = useState(false);
@@ -43,6 +48,9 @@ const Home: NextPage = () => {
         <>
           <div className="card text-center">
             <span className=" font-medium">{address}</span>
+          </div>
+          <div className="card text-center">
+            <span className=" font-medium">nodeId: {nodeId}</span>
           </div>
 
           <div className="card flex flex-col p-2 items-center">
@@ -108,6 +116,9 @@ const Home: NextPage = () => {
         <>
           <div className="card text-center">
             <span className=" font-medium">{address}</span>
+          </div>
+          <div className="card text-center">
+            <span className=" font-medium">nodeId: {nodeId}</span>
           </div>
 
           <div className="card text-center">
@@ -243,7 +254,6 @@ const Home: NextPage = () => {
     data: string
   ) {
     const ethAdaper = getEthAdapter(signer);
-    const safeService = getApiKit(ethAdaper);
     const safeSdk = await getSafeSdk(safeAddress, ethAdaper);
     const ethValue = ethers.utils.parseEther(value).toString();
 
@@ -258,41 +268,90 @@ const Home: NextPage = () => {
       safeTransactionData,
     });
 
+    // Propose Transaction
+    const resp1: apiRespType = await sendRequest({
+      url: `${apiUrl}/plugin/safe/proposeTransaction`,
+      method: HttpMethod.Post,
+      body: {
+        nodeId,
+        safeAddress,
+        txnData: safeTransaction.data,
+      },
+    });
+    console.log({ resp: resp1.txn });
+
     // Sign the Transaction
     const safeTxnHash = await safeSdk.getTransactionHash(safeTransaction);
     console.log({ safeTxnHash });
     const sign = await safeSdk.signTransactionHash(safeTxnHash);
 
-    // Propose Transaction
-    await safeService.proposeTransaction({
-      safeAddress,
-      safeTransactionData: safeTransaction.data,
-      safeTxHash: safeTxnHash,
-      senderAddress: await signer.getAddress(),
-      senderSignature: sign.data,
+    // Add Sign
+    const resp2: apiRespType = await sendRequest({
+      url: `${apiUrl}/plugin/safe/addSignature`,
+      method: HttpMethod.Post,
+      body: {
+        nodeId,
+        safeAddress,
+        txnData: safeTransaction.data,
+        sign,
+      },
     });
+    console.log({ resp: resp2.txn });
   }
 
   async function confirmTxn(signer: Signer, txnHash: string) {
     const ethAdaper = getEthAdapter(signer);
-    const safeService = getApiKit(ethAdaper);
     const safeSdk = await getSafeSdk(safeAddress, ethAdaper);
+
+    // Get the Transaction
+    const resp1: apiRespType = await sendRequest({
+      url: `${apiUrl}/plugin/safe/getTransaction`,
+      method: HttpMethod.Get,
+      query: {
+        nodeId,
+        safeAddress,
+        txnHash,
+      },
+    });
+
+    console.log({ resp1: resp1.txn });
 
     // Sign the Transaction
     const sign = await safeSdk.signTransactionHash(txnHash);
 
-    // Confirm Transaction
-    const resp = await safeService.confirmTransaction(txnHash, sign.data);
-    console.log(resp);
+    // Add Sign
+    const resp2: apiRespType = await sendRequest({
+      url: `${apiUrl}/plugin/safe/addSignature`,
+      method: HttpMethod.Post,
+      body: {
+        nodeId,
+        safeAddress,
+        txnData: resp1.txn.txnData,
+        sign,
+      },
+    });
+    console.log({ resp2: resp2.txn });
   }
 
   async function execTxn(signer: Signer, txnHash: string) {
     const ethAdaper = getEthAdapter(signer);
-    const safeService = getApiKit(ethAdaper);
     const safeSdk = await getSafeSdk(safeAddress, ethAdaper);
 
-    const safeTransaction = await safeService.getTransaction(txnHash);
-    const execTxnResp = await safeSdk.executeTransaction(safeTransaction);
+    // Get the Transaction
+    const resp1: apiRespType = await sendRequest({
+      url: `${apiUrl}/plugin/safe/getTransaction`,
+      method: HttpMethod.Get,
+      query: {
+        nodeId,
+        safeAddress,
+        txnHash,
+      },
+    });
+
+    console.log({ resp: resp1.txn });
+    const txn = await getExecTxn(ethAdaper,safeAddress,resp1)
+
+    const execTxnResp = await safeSdk.executeTransaction(txn);
     const receipt = await execTxnResp.transactionResponse?.wait();
 
     console.log("Transaction executed:");

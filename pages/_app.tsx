@@ -6,13 +6,26 @@ import {
   getDefaultWallets,
   ConnectButton,
 } from "@rainbow-me/rainbowkit";
-import { configureChains, createClient, goerli, WagmiConfig } from "wagmi";
-import { localhost } from "wagmi/chains";
+import {
+  configureChains,
+  createClient,
+  goerli,
+  mainnet,
+  WagmiConfig,
+} from "wagmi";
 import { publicProvider } from "wagmi/providers/public";
+import { jsonRpcProvider } from "wagmi/providers/jsonRpc";
 
 const { chains, provider, webSocketProvider } = configureChains(
-  [goerli],
-  [publicProvider()]
+  [goerli, mainnet],
+  [
+    jsonRpcProvider({
+      rpc: (chain) => ({
+        http: "https://rpc.dev.buildbear.io/absolute-taun-we-0bf9874a",
+      }),
+    }),
+    publicProvider(),
+  ]
 );
 
 const { connectors } = getDefaultWallets({
